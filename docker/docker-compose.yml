@@ -1,0 +1,133 @@
+version: "3.7"
+
+services:
+
+  astro-question-api-nginx:
+    container_name: astro-question-api-nginx
+    hostname: astro-question-api-nginx
+    image: nginx:1.18
+    ports:
+      - 80:80
+    volumes:
+      - ./../:/var/www/astro-question/:rw
+      - ./nginx/astro-question-api.conf:/etc/nginx/conf.d/astro-question-api.conf:ro
+    links:
+      - astro-question-api-php
+    networks:
+      astro-question-api-network:
+        aliases:
+          - astro-question-api.docker
+        ipv4_address: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.11
+
+  astro-question-api-php:
+    container_name: astro-question-api-php
+    build:
+      context: php
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    image: rz/astro-question-api-php
+#    extra_hosts:
+#      - api.rozetka.com.ua:78.27.198.116
+    ports:
+      - 9001:9001
+    environment:
+      - XDEBUG_CONFIG="remote_host=${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.10 client_port=9003 idekey=PHPSTORM;serverName=astro-question_api_service"
+    volumes:
+      - ./../:/var/www/astro-question-api:rw
+      - ${SSH_KEYS_PATH:-~/.ssh/}:/home/www-data/.ssh:ro
+    working_dir: /var/www/astro-question-api
+    links:
+#      - astro-question-api-mockserver
+#      - astro-question-api-postgres
+      - astro-question-api-redis
+      - astro-question-api-rabbitmq
+      - astro-question-api-mysql
+    networks:
+      astro-question-api-network:
+        ipv4_address: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.10
+
+  astro-question-api-mysql:
+    image: mysql:5.7
+    container_name: astro-question-api-mysql
+    command: mysqld --character-set-server=utf8 --collation-server=utf8_unicode_ci --init-connect='SET NAMES UTF8;' --innodb-flush-log-at-trx-commit=0
+    ports:
+      - 3306:3306
+    volumes:
+      - astro-question-api-mysqldata:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_ROOT_PASSWORD: "root_password"
+      MYSQL_DATABASE: "db_admin"
+      MYSQL_USER: "us_admin"
+      MYSQL_PASSWORD: "password"
+    networks:
+      astro-question-api-network:
+        ipv4_address: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.14
+
+  astro-question-api-redis:
+    container_name: astro-question-api-redis
+    image: redis:5.0.5-alpine
+    command: redis-server --requirepass ""
+    ports:
+      - 6379:6379
+    networks:
+      astro-question-api-network:
+        ipv4_address: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.13
+
+  astro-question-api-rabbitmq:
+    container_name: astro-question-api-rabbitmq
+    image: rabbitmq:3.6-management-alpine
+    networks:
+      astro-question-api-network:
+        ipv4_address: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.15
+    ports:
+      - 5672:5672
+      - 15672:15672 # guest:guest
+
+#  warranty-api-mockserver:
+#    image: jamesdbloom/mockserver:mockserver-5.8.0
+#    container_name: warranty-api-mockserver
+#    ports:
+#      - 1080:1080
+#    networks:
+#      warranty-api-network:
+#        ipv4_address: ${WARRANTY_API_NETWORK:-172.19.0}.17
+
+#  warranty-api-allure:
+#    image: rz/warranty-api-allure
+#    build:
+#      context: ./allure
+#      dockerfile: Dockerfile
+#      args:
+#        USER_ID: ${USER_ID:-1000}
+#        GROUP_ID: ${GROUP_ID:-1000}
+#        ALLURE_VERSION: 2.13.5
+#    container_name: warranty-api-allure
+#    volumes:
+#      - ./../:/var/www/warranty-api/ # Делать идентично volumes онтейнера где запускались тесты (php)
+#    environment:
+#      - ROOT=/var/www/warranty-api/
+#      - RESULTS_DIRECTORY=tests/_output/allure-results
+#      - REPORT_DIRECTORY=tests/_output/allure-report
+#    networks:
+#      warranty-api-network:
+#        ipv4_address: ${WARRANTY_API_NETWORK:-172.19.0}.18
+
+volumes:
+#  warranty-api-pgdata:
+#    external:
+#      name: warranty-api-pgdata
+  astro-question-api-mysqldata:
+    external:
+      name: astro-question-api-mysqldata
+
+networks:
+  astro-question-api-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${ASTRO_QUIESTION_API_NETWORK:-172.19.0}.0/24
+    driver_opts:
+      com.docker.network.bridge.name: br_aq
